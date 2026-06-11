@@ -1,14 +1,102 @@
-import { useState, useRef, useCallback } from "react";
+import { useState, useRef, useCallback, useEffect } from "react";
 
-let imgId = 1;
-const uid = () => `img_${Date.now()}_${imgId++}`;
+const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
+const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
+const ADMIN_PASSWORD = "oriion2025";
+
 const fuid = () => `f_${Date.now()}`;
 
-export default function App() {
-  const [folders, setFolders] = useState([
-    { id: "f_demo1", name: "Nike Air Max 2025", images: [] },
-    { id: "f_demo2", name: "Hermes Sneakers", images: [] },
-  ]);
+function uploadToCloudinary(file) {
+  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
+  const formData = new FormData();
+  formData.append("file", file);
+  formData.append("upload_preset", UPLOAD_PRESET);
+  return fetch(url, { method: "POST", body: formData })
+    .then((r) => r.json())
+    .then((data) => ({ id: data.public_id, name: file.name, src: data.secure_url }));
+}
+
+// ── Customer Gallery View ──────────────────────────────────────────
+function GalleryView({ folders }) {
+  const hash = window.location.hash.replace("#/gallery/", "");
+  const folder = folders.find((f) => f.id === hash);
+
+  if (!folder) {
+    return (
+      <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6B6B6B", fontFamily: "Inter, sans-serif" }}>
+        <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>👟</div>
+        <div style={{ fontSize: 16, color: "#888" }}>Collection not found</div>
+      </div>
+    );
+  }
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0D0D0D", fontFamily: "Inter, sans-serif" }}>
+      <div style={{ borderBottom: "1px solid #1E1E1E", padding: "24px 32px", display: "flex", alignItems: "center", gap: 16 }}>
+        <div>
+          <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C" }}>ORIION</div>
+          <div style={{ fontSize: 20, fontWeight: 600, color: "#F2F0EB", marginTop: 4 }}>{folder.name}</div>
+          <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{folder.images.length} items</div>
+        </div>
+      </div>
+      <div style={{ padding: "28px 32px" }}>
+        {folder.images.length === 0 ? (
+          <div style={{ textAlign: "center", padding: "80px 24px", color: "#6B6B6B" }}>
+            <div style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📦</div>
+            <div>No items in this collection yet</div>
+          </div>
+        ) : (
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
+            {folder.images.map((img) => (
+              <div key={img.id} style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", border: "1px solid #1E1E1E", background: "#161616" }}>
+                <img src={img.src} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+              </div>
+            ))}
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ── Login View ─────────────────────────────────────────────────────
+function LoginView({ onLogin }) {
+  const [pw, setPw] = useState("");
+  const [error, setError] = useState(false);
+
+  const attempt = () => {
+    if (pw === ADMIN_PASSWORD) { onLogin(); }
+    else { setError(true); setTimeout(() => setError(false), 2000); }
+  };
+
+  return (
+    <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", fontFamily: "Inter, sans-serif" }}>
+      <div style={{ background: "#161616", border: "1px solid #262626", borderRadius: 12, padding: 40, width: 360, maxWidth: "90vw", textAlign: "center" }}>
+        <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: "0.12em", textTransform: "uppercase", color: "#C9A84C", marginBottom: 4 }}>ORIION</div>
+        <div style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", color: "#6B6B6B", marginBottom: 32 }}>Admin Access</div>
+        <input
+          type="password"
+          placeholder="Enter password"
+          value={pw}
+          onChange={(e) => setPw(e.target.value)}
+          onKeyDown={(e) => e.key === "Enter" && attempt()}
+          style={{ width: "100%", background: "#0D0D0D", border: `1px solid ${error ? "#C0392B" : "#262626"}`, borderRadius: 6, padding: "12px 14px", color: "#F2F0EB", fontSize: 14, fontFamily: "Inter, sans-serif", outline: "none", marginBottom: 12, boxSizing: "border-box" }}
+        />
+        {error && <div style={{ color: "#C0392B", fontSize: 12, marginBottom: 12 }}>Incorrect password</div>}
+        <button onClick={attempt}
+          style={{ width: "100%", background: "#C9A84C", color: "#0D0D0D", border: "none", borderRadius: 6, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
+          Enter
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ── Admin Dashboard ────────────────────────────────────────────────
+function AdminView({ onLogout }) {
+  const [folders, setFolders] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("oriion_folders") || "[]"); } catch { return []; }
+  });
   const [activeFolder, setActiveFolder] = useState(null);
   const [gridSize, setGridSize] = useState(4);
   const [toast, setToast] = useState(null);
@@ -18,13 +106,14 @@ export default function App() {
   const [newFolderName, setNewFolderName] = useState("");
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [uploading, setUploading] = useState(false);
   const fileInput = useRef(null);
 
-  const showToast = (msg) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 2500);
-  };
+  useEffect(() => {
+    localStorage.setItem("oriion_folders", JSON.stringify(folders));
+  }, [folders]);
 
+  const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
   const currentFolder = folders.find((f) => f.id === activeFolder) || null;
 
   const addFolder = () => {
@@ -40,59 +129,42 @@ export default function App() {
 
   const deleteFolder = (id, e) => {
     e.stopPropagation();
+    if (!window.confirm("Delete this collection?")) return;
     setFolders((prev) => prev.filter((f) => f.id !== id));
     if (activeFolder === id) setActiveFolder(null);
   };
 
-  const handleFiles = useCallback(
-    (files) => {
-      if (!activeFolder) {
-        showToast("Select a folder first");
-        return;
-      }
-      const validFiles = Array.from(files).filter((f) =>
-        f.type.startsWith("image/")
-      );
-      if (!validFiles.length) return;
-      validFiles.forEach((file) => {
-        const reader = new FileReader();
-        reader.onload = (e) => {
-          const img = { id: uid(), name: file.name, src: e.target.result };
-          setFolders((prev) =>
-            prev.map((f) =>
-              f.id === activeFolder
-                ? { ...f, images: [...f.images, img] }
-                : f
-            )
-          );
-        };
-        reader.readAsDataURL(file);
-      });
-      showToast(`${validFiles.length} photo(s) added`);
-    },
-    [activeFolder]
-  );
+  const handleFiles = useCallback(async (files) => {
+    if (!activeFolder) { showToast("Select a folder first"); return; }
+    const validFiles = Array.from(files).filter((f) => f.type.startsWith("image/"));
+    if (!validFiles.length) return;
+    setUploading(true);
+    showToast("Uploading...");
+    try {
+      const uploaded = await Promise.all(validFiles.map(uploadToCloudinary));
+      setFolders((prev) => prev.map((f) =>
+        f.id === activeFolder ? { ...f, images: [...f.images, ...uploaded] } : f
+      ));
+      showToast(`${uploaded.length} photo(s) uploaded`);
+    } catch {
+      showToast("Upload failed — check Cloudinary settings");
+    }
+    setUploading(false);
+  }, [activeFolder]);
 
-  const onDrop = (e) => {
-    e.preventDefault();
-    setDragOver(false);
-    handleFiles(e.dataTransfer.files);
-  };
+  const onDrop = (e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); };
 
   const deleteImage = (imgId, e) => {
     e.stopPropagation();
-    setFolders((prev) =>
-      prev.map((f) =>
-        f.id === activeFolder
-          ? { ...f, images: f.images.filter((i) => i.id !== imgId) }
-          : f
-      )
-    );
+    setFolders((prev) => prev.map((f) =>
+      f.id === activeFolder ? { ...f, images: f.images.filter((i) => i.id !== imgId) } : f
+    ));
   };
 
+  const shareLink = `${window.location.origin}${window.location.pathname}#/gallery/${activeFolder}`;
+
   const copyLink = () => {
-    const link = `${window.location.origin}/gallery/${activeFolder}`;
-    navigator.clipboard.writeText(link).then(() => {
+    navigator.clipboard.writeText(shareLink).then(() => {
       setCopied(true);
       setTimeout(() => setCopied(false), 2000);
       showToast("Link copied!");
@@ -126,8 +198,12 @@ export default function App() {
             + New Collection
           </button>
         </div>
-        <div style={{ padding: "16px 24px", borderTop: "1px solid #1E1E1E", fontSize: 11, color: "#6B6B6B" }}>
-          {folders.length} collections · {totalImages} photos
+        <div style={{ padding: "16px 24px", borderTop: "1px solid #1E1E1E" }}>
+          <div style={{ fontSize: 11, color: "#6B6B6B", marginBottom: 8 }}>{folders.length} collections · {totalImages} photos</div>
+          <button onClick={onLogout}
+            style={{ background: "none", border: "1px solid #262626", color: "#6B6B6B", borderRadius: 6, padding: "6px 12px", fontSize: 12, cursor: "pointer", fontFamily: "Inter, sans-serif" }}>
+            Log out
+          </button>
         </div>
       </div>
 
@@ -146,7 +222,7 @@ export default function App() {
           <>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 32px", borderBottom: "1px solid #262626", background: "#0D0D0D" }}>
               <div>
-                <div style={{ fontFamily: "sans-serif", fontSize: 20, fontWeight: 600 }}>{currentFolder.name}</div>
+                <div style={{ fontSize: 20, fontWeight: 600 }}>{currentFolder.name}</div>
                 <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{currentFolder.images.length} photos</div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
@@ -154,9 +230,9 @@ export default function App() {
                   style={{ background: "transparent", border: "1px solid #262626", color: "#F2F0EB", borderRadius: 6, padding: "9px 18px", cursor: "pointer", fontSize: 13, fontFamily: "Inter, sans-serif" }}>
                   🔗 Share Link
                 </button>
-                <button onClick={() => fileInput.current?.click()}
-                  style={{ background: "#C9A84C", color: "#0D0D0D", border: "none", borderRadius: 6, padding: "9px 18px", fontWeight: 600, cursor: "pointer", fontSize: 13 }}>
-                  + Add Photos
+                <button onClick={() => fileInput.current?.click()} disabled={uploading}
+                  style={{ background: "#C9A84C", color: "#0D0D0D", border: "none", borderRadius: 6, padding: "9px 18px", fontWeight: 600, cursor: "pointer", fontSize: 13, opacity: uploading ? 0.7 : 1 }}>
+                  {uploading ? "Uploading..." : "+ Add Photos"}
                 </button>
               </div>
             </div>
@@ -168,10 +244,9 @@ export default function App() {
                 style={{ border: `1.5px dashed ${dragOver ? "#8A6F2E" : "#2E2E2E"}`, borderRadius: 10, padding: "36px 24px", textAlign: "center", cursor: "pointer", marginBottom: 28, background: dragOver ? "rgba(201,168,76,0.04)" : "transparent" }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>📸</div>
                 <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Drop photos here or click to upload</div>
-                <div style={{ fontSize: 12, color: "#6B6B6B" }}>JPG, PNG, WEBP</div>
+                <div style={{ fontSize: 12, color: "#6B6B6B" }}>JPG, PNG, WEBP — stored permanently on Cloudinary</div>
               </div>
               <input ref={fileInput} type="file" multiple accept="image/*" style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
-
               {currentFolder.images.length > 0 ? (
                 <>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
@@ -219,17 +294,15 @@ export default function App() {
           <div onClick={(e) => e.stopPropagation()}
             style={{ background: "#161616", border: "1px solid #262626", borderRadius: 12, padding: 32, width: 480, maxWidth: "92vw" }}>
             <div style={{ fontSize: 17, fontWeight: 600, marginBottom: 6 }}>Share "{currentFolder?.name}"</div>
-            <div style={{ fontSize: 13, color: "#6B6B6B", marginBottom: 24 }}>This link never expires. Send it directly to customers.</div>
+            <div style={{ fontSize: 13, color: "#6B6B6B", marginBottom: 24 }}>Permanent link — customers see photos only, no controls.</div>
             <div style={{ display: "flex", alignItems: "center", gap: 10, background: "#0D0D0D", border: "1px solid #262626", borderRadius: 6, padding: "10px 14px", marginBottom: 20 }}>
-              <span style={{ flex: 1, fontSize: 12.5, color: "#C9A84C", fontFamily: "monospace", wordBreak: "break-all" }}>
-                {`${window.location.origin}/gallery/${activeFolder}`}
-              </span>
+              <span style={{ flex: 1, fontSize: 12, color: "#C9A84C", fontFamily: "monospace", wordBreak: "break-all" }}>{shareLink}</span>
               <button onClick={copyLink}
                 style={{ background: "#C9A84C", color: "#0D0D0D", border: "none", borderRadius: 4, padding: "6px 12px", fontSize: 12, fontWeight: 600, cursor: "pointer", whiteSpace: "nowrap" }}>
                 {copied ? "✓ Copied" : "Copy"}
               </button>
             </div>
-            <div style={{ display: "flex", gap: 10, justifyContent: "flex-end" }}>
+            <div style={{ display: "flex", justifyContent: "flex-end" }}>
               <button onClick={() => setShareModal(false)}
                 style={{ background: "transparent", border: "1px solid #262626", color: "#F2F0EB", borderRadius: 6, padding: "9px 18px", cursor: "pointer", fontSize: 13, fontFamily: "Inter, sans-serif" }}>
                 Close
@@ -250,7 +323,7 @@ export default function App() {
             <input autoFocus value={newFolderName} onChange={(e) => setNewFolderName(e.target.value)}
               onKeyDown={(e) => e.key === "Enter" && addFolder()}
               placeholder="Collection name..."
-              style={{ width: "100%", background: "#0D0D0D", border: "1px solid #262626", borderRadius: 6, padding: "10px 14px", color: "#F2F0EB", fontSize: 13.5, fontFamily: "Inter, sans-serif", outline: "none" }} />
+              style={{ width: "100%", background: "#0D0D0D", border: "1px solid #262626", borderRadius: 6, padding: "10px 14px", color: "#F2F0EB", fontSize: 13.5, fontFamily: "Inter, sans-serif", outline: "none", boxSizing: "border-box" }} />
             <div style={{ display: "flex", gap: 10, marginTop: 16 }}>
               <button onClick={() => setAddFolderModal(false)}
                 style={{ flex: 1, background: "transparent", border: "1px solid #262626", color: "#F2F0EB", borderRadius: 6, padding: "10px", cursor: "pointer", fontSize: 13, fontFamily: "Inter, sans-serif" }}>
@@ -270,9 +343,7 @@ export default function App() {
         <div onClick={() => setLightbox(null)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
           <button onClick={() => setLightbox(null)}
-            style={{ position: "absolute", top: 20, right: 24, background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: 22, width: 40, height: 40, borderRadius: "50%", cursor: "pointer" }}>
-            ✕
-          </button>
+            style={{ position: "absolute", top: 20, right: 24, background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: 22, width: 40, height: 40, borderRadius: "50%", cursor: "pointer" }}>✕</button>
           <img src={lightbox} alt="preview" onClick={(e) => e.stopPropagation()}
             style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} />
         </div>
@@ -286,4 +357,18 @@ export default function App() {
       )}
     </div>
   );
+}
+
+// ── Root App ───────────────────────────────────────────────────────
+export default function App() {
+  const [loggedIn, setLoggedIn] = useState(() => sessionStorage.getItem("oriion_auth") === "true");
+  const [folders, setFolders] = useState(() => {
+    try { return JSON.parse(localStorage.getItem("oriion_folders") || "[]"); } catch { return []; }
+  });
+
+  const isGalleryView = window.location.hash.startsWith("#/gallery/");
+
+  if (isGalleryView) return <GalleryView folders={folders} />;
+  if (!loggedIn) return <LoginView onLogin={() => { sessionStorage.setItem("oriion_auth", "true"); setLoggedIn(true); }} />;
+  return <AdminView onLogout={() => { sessionStorage.removeItem("oriion_auth"); setLoggedIn(false); }} />;
 }
