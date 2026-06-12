@@ -23,10 +23,12 @@ function uploadToCloudinary(file) {
 }
 
 // ── Customer Gallery View ──────────────────────────────────────────
+
 function GalleryView() {
   const hash = window.location.hash.replace("#/gallery/", "");
   const [folder, setFolder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [lightbox, setLightbox] = useState(null);
 
   useEffect(() => {
     supabase.from("collections").select("*").eq("id", hash).single()
@@ -62,13 +64,26 @@ function GalleryView() {
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
             {(folder.images || []).map((img) => (
-              <div key={img.id} style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", border: "1px solid #1E1E1E", background: "#161616" }}>
+              <div key={img.id} onClick={() => setLightbox(img.src)}
+                style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", border: "1px solid #1E1E1E", background: "#161616", cursor: "pointer" }}>
                 <img src={img.src} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               </div>
             ))}
           </div>
         )}
       </div>
+
+      {lightbox && (
+        <div onClick={() => setLightbox(null)}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
+          <button onClick={() => setLightbox(null)}
+            style={{ position: "absolute", top: 20, right: 24, background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: 22, width: 40, height: 40, borderRadius: "50%", cursor: "pointer" }}>
+            ✕
+          </button>
+          <img src={lightbox} alt="preview" onClick={(e) => e.stopPropagation()}
+            style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} />
+        </div>
+      )}
     </div>
   );
 }
