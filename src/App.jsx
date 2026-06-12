@@ -1,8 +1,14 @@
 import { useState, useRef, useCallback, useEffect } from "react";
+import { createClient } from "@supabase/supabase-js";
 
 const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
 const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 const ADMIN_PASSWORD = "oriion2025";
+
+const supabase = createClient(
+  import.meta.env.VITE_SUPABASE_URL,
+  import.meta.env.VITE_SUPABASE_ANON_KEY
+);
 
 const fuid = () => `f_${Date.now()}`;
 
@@ -17,37 +23,45 @@ function uploadToCloudinary(file) {
 }
 
 // ── Customer Gallery View ──────────────────────────────────────────
-function GalleryView({ folders }) {
+function GalleryView() {
   const hash = window.location.hash.replace("#/gallery/", "");
-  const folder = folders.find((f) => f.id === hash);
+  const [folder, setFolder] = useState(null);
+  const [loading, setLoading] = useState(true);
 
-  if (!folder) {
-    return (
-      <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6B6B6B", fontFamily: "Inter, sans-serif" }}>
-        <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>👟</div>
-        <div style={{ fontSize: 16, color: "#888" }}>Collection not found</div>
-      </div>
-    );
-  }
+  useEffect(() => {
+    supabase.from("collections").select("*").eq("id", hash).single()
+      .then(({ data }) => { setFolder(data); setLoading(false); });
+  }, [hash]);
+
+  if (loading) return (
+    <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B6B6B", fontFamily: "Inter, sans-serif" }}>
+      Loading...
+    </div>
+  );
+
+  if (!folder) return (
+    <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6B6B6B", fontFamily: "Inter, sans-serif" }}>
+      <div style={{ fontSize: 48, marginBottom: 16, opacity: 0.3 }}>👟</div>
+      <div style={{ fontSize: 16, color: "#888" }}>Collection not found</div>
+    </div>
+  );
 
   return (
     <div style={{ minHeight: "100vh", background: "#0D0D0D", fontFamily: "Inter, sans-serif" }}>
-      <div style={{ borderBottom: "1px solid #1E1E1E", padding: "24px 32px", display: "flex", alignItems: "center", gap: 16 }}>
-        <div>
-          <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C" }}>ORIION</div>
-          <div style={{ fontSize: 20, fontWeight: 600, color: "#F2F0EB", marginTop: 4 }}>{folder.name}</div>
-          <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{folder.images.length} items</div>
-        </div>
+      <div style={{ borderBottom: "1px solid #1E1E1E", padding: "24px 32px" }}>
+        <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C" }}>ORIION</div>
+        <div style={{ fontSize: 20, fontWeight: 600, color: "#F2F0EB", marginTop: 4 }}>{folder.name}</div>
+        <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{(folder.images || []).length} items</div>
       </div>
       <div style={{ padding: "28px 32px" }}>
-        {folder.images.length === 0 ? (
+        {(folder.images || []).length === 0 ? (
           <div style={{ textAlign: "center", padding: "80px 24px", color: "#6B6B6B" }}>
             <div style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📦</div>
             <div>No items in this collection yet</div>
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(auto-fill, minmax(200px, 1fr))", gap: 12 }}>
-            {folder.images.map((img) => (
+            {(folder.images || []).map((img) => (
               <div key={img.id} style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", border: "1px solid #1E1E1E", background: "#161616" }}>
                 <img src={img.src} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               </div>
@@ -94,9 +108,7 @@ function LoginView({ onLogin }) {
 
 // ── Admin Dashboard ────────────────────────────────────────────────
 function AdminView({ onLogout }) {
-  const [folders, setFolders] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("oriion_folders") || "[]"); } catch { return []; }
-  });
+  const [folders, setFolders] = useState([]);
   const [activeFolder, setActiveFolder] = useState(null);
   const [gridSize, setGridSize] = useState(4);
   const [toast, setToast] = useState(null);
@@ -110,26 +122,31 @@ function AdminView({ onLogout }) {
   const fileInput = useRef(null);
 
   useEffect(() => {
-    localStorage.setItem("oriion_folders", JSON.stringify(folders));
-  }, [folders]);
+    supabase.from("collections").select("*").order("id")
+      .then(({ data }) => { if (data) setFolders(data); });
+  }, []);
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
   const currentFolder = folders.find((f) => f.id === activeFolder) || null;
 
-  const addFolder = () => {
+  const addFolder = async () => {
     const name = newFolderName.trim();
     if (!name) return;
-    const f = { id: fuid(), name, images: [] };
-    setFolders((prev) => [...prev, f]);
-    setActiveFolder(f.id);
+    const newF = { id: fuid(), name, images: [] };
+    const { data } = await supabase.from("collections").insert(newF).select().single();
+    if (data) {
+      setFolders((prev) => [...prev, data]);
+      setActiveFolder(data.id);
+    }
     setNewFolderName("");
     setAddFolderModal(false);
     showToast("Collection created");
   };
 
-  const deleteFolder = (id, e) => {
+  const deleteFolder = async (id, e) => {
     e.stopPropagation();
     if (!window.confirm("Delete this collection?")) return;
+    await supabase.from("collections").delete().eq("id", id);
     setFolders((prev) => prev.filter((f) => f.id !== id));
     if (activeFolder === id) setActiveFolder(null);
   };
@@ -142,22 +159,26 @@ function AdminView({ onLogout }) {
     showToast("Uploading...");
     try {
       const uploaded = await Promise.all(validFiles.map(uploadToCloudinary));
+      const updatedImages = [...(currentFolder.images || []), ...uploaded];
+      await supabase.from("collections").update({ images: updatedImages }).eq("id", activeFolder);
       setFolders((prev) => prev.map((f) =>
-        f.id === activeFolder ? { ...f, images: [...f.images, ...uploaded] } : f
+        f.id === activeFolder ? { ...f, images: updatedImages } : f
       ));
       showToast(`${uploaded.length} photo(s) uploaded`);
     } catch {
-      showToast("Upload failed — check Cloudinary settings");
+      showToast("Upload failed");
     }
     setUploading(false);
-  }, [activeFolder]);
+  }, [activeFolder, currentFolder]);
 
   const onDrop = (e) => { e.preventDefault(); setDragOver(false); handleFiles(e.dataTransfer.files); };
 
-  const deleteImage = (imgId, e) => {
+  const deleteImage = async (imgId, e) => {
     e.stopPropagation();
+    const updatedImages = currentFolder.images.filter((i) => i.id !== imgId);
+    await supabase.from("collections").update({ images: updatedImages }).eq("id", activeFolder);
     setFolders((prev) => prev.map((f) =>
-      f.id === activeFolder ? { ...f, images: f.images.filter((i) => i.id !== imgId) } : f
+      f.id === activeFolder ? { ...f, images: updatedImages } : f
     ));
   };
 
@@ -171,11 +192,10 @@ function AdminView({ onLogout }) {
     });
   };
 
-  const totalImages = folders.reduce((sum, f) => sum + f.images.length, 0);
+  const totalImages = folders.reduce((sum, f) => sum + (f.images || []).length, 0);
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0D0D0D", color: "#F2F0EB", fontFamily: "Inter, sans-serif" }}>
-      {/* Sidebar */}
       <div style={{ width: 260, background: "#161616", borderRight: "1px solid #262626", display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0 }}>
         <div style={{ padding: "28px 24px 20px", borderBottom: "1px solid #262626" }}>
           <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 18, letterSpacing: "0.12em", textTransform: "uppercase", color: "#C9A84C" }}>ORIION</div>
@@ -188,7 +208,7 @@ function AdminView({ onLogout }) {
               style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 6, cursor: "pointer", fontSize: 13.5, color: activeFolder === f.id ? "#C9A84C" : "#AAAAAA", background: activeFolder === f.id ? "rgba(201,168,76,0.10)" : "transparent", marginBottom: 2 }}>
               <span>📁</span>
               <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-              <span style={{ fontSize: 11, color: "#6B6B6B", background: "#222", borderRadius: 20, padding: "1px 7px" }}>{f.images.length}</span>
+              <span style={{ fontSize: 11, color: "#6B6B6B", background: "#222", borderRadius: 20, padding: "1px 7px" }}>{(f.images || []).length}</span>
               <button onClick={(e) => deleteFolder(f.id, e)}
                 style={{ background: "none", border: "none", color: "#C0392B", cursor: "pointer", fontSize: 13 }}>✕</button>
             </div>
@@ -207,7 +227,6 @@ function AdminView({ onLogout }) {
         </div>
       </div>
 
-      {/* Main */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         {!currentFolder ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6B6B6B", gap: 12 }}>
@@ -223,7 +242,7 @@ function AdminView({ onLogout }) {
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 32px", borderBottom: "1px solid #262626", background: "#0D0D0D" }}>
               <div>
                 <div style={{ fontSize: 20, fontWeight: 600 }}>{currentFolder.name}</div>
-                <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{currentFolder.images.length} photos</div>
+                <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{(currentFolder.images || []).length} photos</div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setShareModal(true)}
@@ -244,13 +263,13 @@ function AdminView({ onLogout }) {
                 style={{ border: `1.5px dashed ${dragOver ? "#8A6F2E" : "#2E2E2E"}`, borderRadius: 10, padding: "36px 24px", textAlign: "center", cursor: "pointer", marginBottom: 28, background: dragOver ? "rgba(201,168,76,0.04)" : "transparent" }}>
                 <div style={{ fontSize: 28, marginBottom: 10 }}>📸</div>
                 <div style={{ fontSize: 14, fontWeight: 500, marginBottom: 4 }}>Drop photos here or click to upload</div>
-                <div style={{ fontSize: 12, color: "#6B6B6B" }}>JPG, PNG, WEBP — stored permanently on Cloudinary</div>
+                <div style={{ fontSize: 12, color: "#6B6B6B" }}>JPG, PNG, WEBP — stored permanently</div>
               </div>
               <input ref={fileInput} type="file" multiple accept="image/*" style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
-              {currentFolder.images.length > 0 ? (
+              {(currentFolder.images || []).length > 0 ? (
                 <>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
-                    <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: "#6B6B6B" }}>{currentFolder.images.length} items</div>
+                    <div style={{ fontSize: 11, letterSpacing: "0.18em", textTransform: "uppercase", color: "#6B6B6B" }}>{(currentFolder.images || []).length} items</div>
                     <div style={{ display: "flex", gap: 4 }}>
                       {[2, 3, 4].map((n) => (
                         <button key={n} onClick={() => setGridSize(n)}
@@ -261,7 +280,7 @@ function AdminView({ onLogout }) {
                     </div>
                   </div>
                   <div style={{ display: "grid", gridTemplateColumns: `repeat(${gridSize}, 1fr)`, gap: 12 }}>
-                    {currentFolder.images.map((img) => (
+                    {(currentFolder.images || []).map((img) => (
                       <div key={img.id} onClick={() => setLightbox(img.src)}
                         style={{ position: "relative", borderRadius: 6, overflow: "hidden", background: "#1A1A1A", aspectRatio: "1", border: "1px solid #262626", cursor: "pointer" }}>
                         <img src={img.src} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
@@ -287,7 +306,6 @@ function AdminView({ onLogout }) {
         )}
       </div>
 
-      {/* Share Modal */}
       {shareModal && (
         <div onClick={() => setShareModal(false)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -312,7 +330,6 @@ function AdminView({ onLogout }) {
         </div>
       )}
 
-      {/* Add Folder Modal */}
       {addFolderModal && (
         <div onClick={() => setAddFolderModal(false)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.75)", zIndex: 100, display: "flex", alignItems: "center", justifyContent: "center" }}>
@@ -338,7 +355,6 @@ function AdminView({ onLogout }) {
         </div>
       )}
 
-      {/* Lightbox */}
       {lightbox && (
         <div onClick={() => setLightbox(null)}
           style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.92)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
@@ -349,7 +365,6 @@ function AdminView({ onLogout }) {
         </div>
       )}
 
-      {/* Toast */}
       {toast && (
         <div style={{ position: "fixed", bottom: 24, right: 24, background: "#1E1E1E", border: "1px solid #262626", borderLeft: "3px solid #C9A84C", borderRadius: 6, padding: "12px 18px", fontSize: 13, color: "#F2F0EB", zIndex: 200 }}>
           {toast}
@@ -359,16 +374,11 @@ function AdminView({ onLogout }) {
   );
 }
 
-// ── Root App ───────────────────────────────────────────────────────
 export default function App() {
   const [loggedIn, setLoggedIn] = useState(() => sessionStorage.getItem("oriion_auth") === "true");
-  const [folders, setFolders] = useState(() => {
-    try { return JSON.parse(localStorage.getItem("oriion_folders") || "[]"); } catch { return []; }
-  });
-
   const isGalleryView = window.location.hash.startsWith("#/gallery/");
 
-  if (isGalleryView) return <GalleryView folders={folders} />;
+  if (isGalleryView) return <GalleryView />;
   if (!loggedIn) return <LoginView onLogin={() => { sessionStorage.setItem("oriion_auth", "true"); setLoggedIn(true); }} />;
   return <AdminView onLogout={() => { sessionStorage.removeItem("oriion_auth"); setLoggedIn(false); }} />;
 }
