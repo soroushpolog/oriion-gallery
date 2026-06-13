@@ -162,6 +162,7 @@ function AdminView({ onLogout }) {
   const [dragOver, setDragOver] = useState(false);
   const [copied, setCopied] = useState(false);
   const [uploading, setUploading] = useState(false);
+  const [search, setSearch] = useState("");
   const fileInput = useRef(null);
 
   useEffect(() => {
@@ -171,6 +172,9 @@ function AdminView({ onLogout }) {
 
   const showToast = (msg) => { setToast(msg); setTimeout(() => setToast(null), 2500); };
   const currentFolder = folders.find((f) => f.id === activeFolder) || null;
+  const filteredFolders = folders.filter((f) =>
+    f.name.toLowerCase().includes(search.toLowerCase())
+  );
 
   const addFolder = async () => {
     const name = newFolderName.trim();
@@ -242,28 +246,57 @@ function AdminView({ onLogout }) {
 
   return (
     <div style={{ display: "flex", minHeight: "100vh", background: "#0D0D0D", color: "#F2F0EB", fontFamily: "Inter, sans-serif" }}>
-      <div style={{ width: 260, background: "#161616", borderRight: "1px solid #262626", display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0 }}>
+      {/* Sidebar */}
+      <div style={{ width: 270, background: "#161616", borderRight: "1px solid #262626", display: "flex", flexDirection: "column", height: "100vh", position: "sticky", top: 0 }}>
         <div style={{ padding: "28px 24px 20px", borderBottom: "1px solid #262626" }}>
           <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 18, letterSpacing: "0.12em", textTransform: "uppercase", color: "#C9A84C" }}>ORIION</div>
           <div style={{ fontSize: 10, letterSpacing: "0.2em", textTransform: "uppercase", color: "#6B6B6B", marginTop: 2 }}>Collection Gallery</div>
         </div>
-        <div style={{ padding: "20px 16px 8px", flex: 1, overflowY: "auto" }}>
-          <div style={{ fontSize: 9, letterSpacing: "0.25em", textTransform: "uppercase", color: "#6B6B6B", marginBottom: 8, padding: "0 8px" }}>Collections</div>
-          {folders.map((f) => (
-            <div key={f.id} onClick={() => setActiveFolder(f.id)}
-              style={{ display: "flex", alignItems: "center", gap: 10, padding: "9px 12px", borderRadius: 6, cursor: "pointer", fontSize: 13.5, color: activeFolder === f.id ? "#C9A84C" : "#AAAAAA", background: activeFolder === f.id ? "rgba(201,168,76,0.10)" : "transparent", marginBottom: 2 }}>
-              <span>📁</span>
-              <span style={{ flex: 1, overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" }}>{f.name}</span>
-              <span style={{ fontSize: 11, color: "#6B6B6B", background: "#222", borderRadius: 20, padding: "1px 7px" }}>{(f.images || []).length}</span>
-              <button onClick={(e) => deleteFolder(f.id, e)}
-                style={{ background: "none", border: "none", color: "#C0392B", cursor: "pointer", fontSize: 13 }}>✕</button>
-            </div>
-          ))}
+
+        {/* Search */}
+        <div style={{ padding: "12px 16px", borderBottom: "1px solid #1E1E1E" }}>
+          <input
+            placeholder="🔍 Search collections..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            style={{ width: "100%", background: "#0D0D0D", border: "1px solid #262626", borderRadius: 6, padding: "8px 12px", color: "#F2F0EB", fontSize: 12.5, fontFamily: "Inter, sans-serif", outline: "none", boxSizing: "border-box" }}
+          />
+        </div>
+
+        <div style={{ padding: "12px 16px 8px", flex: 1, overflowY: "auto" }}>
+          <div style={{ fontSize: 9, letterSpacing: "0.25em", textTransform: "uppercase", color: "#6B6B6B", marginBottom: 8, padding: "0 8px" }}>
+            Collections {search && `(${filteredFolders.length})`}
+          </div>
+          {filteredFolders.map((f) => {
+            const cover = (f.images || [])[0]?.src;
+            return (
+              <div key={f.id} onClick={() => setActiveFolder(f.id)}
+                style={{ display: "flex", alignItems: "center", gap: 10, padding: "8px 10px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: activeFolder === f.id ? "#C9A84C" : "#AAAAAA", background: activeFolder === f.id ? "rgba(201,168,76,0.10)" : "transparent", marginBottom: 2 }}>
+                {/* Cover thumbnail */}
+                <div style={{ width: 36, height: 36, borderRadius: 5, overflow: "hidden", background: "#222", flexShrink: 0, border: "1px solid #2E2E2E" }}>
+                  {cover
+                    ? <img src={cover} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                    : <div style={{ width: "100%", height: "100%", display: "flex", alignItems: "center", justifyContent: "center", fontSize: 16 }}>📁</div>
+                  }
+                </div>
+                <div style={{ flex: 1, overflow: "hidden" }}>
+                  <div style={{ overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap", fontSize: 13 }}>{f.name}</div>
+                  <div style={{ fontSize: 10, color: "#6B6B6B", marginTop: 1 }}>{(f.images || []).length} photos</div>
+                </div>
+                <button onClick={(e) => deleteFolder(f.id, e)}
+                  style={{ background: "none", border: "none", color: "#C0392B", cursor: "pointer", fontSize: 13, flexShrink: 0 }}>✕</button>
+              </div>
+            );
+          })}
+          {filteredFolders.length === 0 && search && (
+            <div style={{ fontSize: 12, color: "#6B6B6B", padding: "12px 8px" }}>No collections found</div>
+          )}
           <button onClick={() => setAddFolderModal(true)}
-            style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "#6B6B6B", background: "none", border: "1px dashed #2E2E2E", width: "100%", marginTop: 4, fontFamily: "Inter, sans-serif" }}>
+            style={{ display: "flex", alignItems: "center", gap: 8, padding: "9px 12px", borderRadius: 6, cursor: "pointer", fontSize: 13, color: "#6B6B6B", background: "none", border: "1px dashed #2E2E2E", width: "100%", marginTop: 8, fontFamily: "Inter, sans-serif" }}>
             + New Collection
           </button>
         </div>
+
         <div style={{ padding: "16px 24px", borderTop: "1px solid #1E1E1E" }}>
           <div style={{ fontSize: 11, color: "#6B6B6B", marginBottom: 8 }}>{folders.length} collections · {totalImages} photos</div>
           <button onClick={onLogout}
@@ -273,6 +306,7 @@ function AdminView({ onLogout }) {
         </div>
       </div>
 
+      {/* Main */}
       <div style={{ flex: 1, display: "flex", flexDirection: "column" }}>
         {!currentFolder ? (
           <div style={{ flex: 1, display: "flex", flexDirection: "column", alignItems: "center", justifyContent: "center", color: "#6B6B6B", gap: 12 }}>
@@ -286,9 +320,17 @@ function AdminView({ onLogout }) {
         ) : (
           <>
             <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", padding: "20px 32px", borderBottom: "1px solid #262626", background: "#0D0D0D" }}>
-              <div>
-                <div style={{ fontSize: 20, fontWeight: 600 }}>{currentFolder.name}</div>
-                <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{(currentFolder.images || []).length} photos</div>
+              <div style={{ display: "flex", alignItems: "center", gap: 14 }}>
+                {/* Cover in topbar */}
+                {(currentFolder.images || [])[0]?.src && (
+                  <div style={{ width: 48, height: 48, borderRadius: 8, overflow: "hidden", border: "1px solid #262626", flexShrink: 0 }}>
+                    <img src={currentFolder.images[0].src} alt="" style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
+                  </div>
+                )}
+                <div>
+                  <div style={{ fontSize: 20, fontWeight: 600 }}>{currentFolder.name}</div>
+                  <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{(currentFolder.images || []).length} photos</div>
+                </div>
               </div>
               <div style={{ display: "flex", gap: 10 }}>
                 <button onClick={() => setShareModal(true)}
@@ -301,6 +343,7 @@ function AdminView({ onLogout }) {
                 </button>
               </div>
             </div>
+
             <div style={{ padding: "28px 32px", flex: 1, overflowY: "auto" }}>
               <div onClick={() => fileInput.current?.click()}
                 onDragOver={(e) => { e.preventDefault(); setDragOver(true); }}
@@ -312,6 +355,7 @@ function AdminView({ onLogout }) {
                 <div style={{ fontSize: 12, color: "#6B6B6B" }}>JPG, PNG, WEBP — stored permanently</div>
               </div>
               <input ref={fileInput} type="file" multiple accept="image/*" style={{ display: "none" }} onChange={(e) => handleFiles(e.target.files)} />
+
               {(currentFolder.images || []).length > 0 ? (
                 <>
                   <div style={{ display: "flex", alignItems: "center", justifyContent: "space-between", marginBottom: 16 }}>
