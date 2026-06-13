@@ -62,7 +62,7 @@ function GalleryView() {
             <div>No items in this collection yet</div>
           </div>
         ) : (
-          <div style={{ display: "grid", gridTemplateColumns: "repeat(4, 1fr)", gap: 12 }}>
+          <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
             {(folder.images || []).map((img) => (
               <div key={img.id} onClick={() => setLightbox(img.src)}
                 style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", border: "1px solid #1E1E1E", background: "#161616", cursor: "pointer" }}>
