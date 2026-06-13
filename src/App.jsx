@@ -10,6 +10,9 @@ const supabase = createClient(
   import.meta.env.VITE_SUPABASE_ANON_KEY
 );
 
+const slugify = (text) =>
+  text.toLowerCase().trim().replace(/\s+/g, "-").replace(/[^a-z0-9-]/g, "");
+
 const fuid = () => `f_${Date.now()}`;
 
 function uploadToCloudinary(file) {
@@ -23,17 +26,41 @@ function uploadToCloudinary(file) {
 }
 
 // ── Customer Gallery View ──────────────────────────────────────────
-
 function GalleryView() {
   const hash = window.location.hash.replace("#/gallery/", "");
   const [folder, setFolder] = useState(null);
   const [loading, setLoading] = useState(true);
-  const [lightbox, setLightbox] = useState(null);
+  const [lightboxIndex, setLightboxIndex] = useState(null);
+  const touchStartX = useRef(null);
 
   useEffect(() => {
-    supabase.from("collections").select("*").eq("id", hash).single()
+    supabase.from("collections").select("*").eq("slug", hash).single()
       .then(({ data }) => { setFolder(data); setLoading(false); });
   }, [hash]);
+
+  const images = folder?.images || [];
+
+  const prev = () => setLightboxIndex((i) => (i > 0 ? i - 1 : images.length - 1));
+  const next = () => setLightboxIndex((i) => (i < images.length - 1 ? i + 1 : 0));
+
+  useEffect(() => {
+    if (lightboxIndex === null) return;
+    const handler = (e) => {
+      if (e.key === "ArrowLeft") prev();
+      if (e.key === "ArrowRight") next();
+      if (e.key === "Escape") setLightboxIndex(null);
+    };
+    window.addEventListener("keydown", handler);
+    return () => window.removeEventListener("keydown", handler);
+  }, [lightboxIndex, images.length]);
+
+  const handleTouchStart = (e) => { touchStartX.current = e.touches[0].clientX; };
+  const handleTouchEnd = (e) => {
+    if (touchStartX.current === null) return;
+    const diff = touchStartX.current - e.changedTouches[0].clientX;
+    if (Math.abs(diff) > 50) { diff > 0 ? next() : prev(); }
+    touchStartX.current = null;
+  };
 
   if (loading) return (
     <div style={{ minHeight: "100vh", background: "#0D0D0D", display: "flex", alignItems: "center", justifyContent: "center", color: "#6B6B6B", fontFamily: "Inter, sans-serif" }}>
@@ -53,18 +80,18 @@ function GalleryView() {
       <div style={{ borderBottom: "1px solid #1E1E1E", padding: "24px 32px" }}>
         <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 13, letterSpacing: "0.15em", textTransform: "uppercase", color: "#C9A84C" }}>ORIION</div>
         <div style={{ fontSize: 20, fontWeight: 600, color: "#F2F0EB", marginTop: 4 }}>{folder.name}</div>
-        <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{(folder.images || []).length} items</div>
+        <div style={{ fontSize: 12, color: "#6B6B6B", marginTop: 2 }}>{images.length} items</div>
       </div>
       <div style={{ padding: "28px 32px" }}>
-        {(folder.images || []).length === 0 ? (
+        {images.length === 0 ? (
           <div style={{ textAlign: "center", padding: "80px 24px", color: "#6B6B6B" }}>
             <div style={{ fontSize: 40, opacity: 0.3, marginBottom: 12 }}>📦</div>
             <div>No items in this collection yet</div>
           </div>
         ) : (
           <div style={{ display: "grid", gridTemplateColumns: "repeat(3, 1fr)", gap: 12 }}>
-            {(folder.images || []).map((img) => (
-              <div key={img.id} onClick={() => setLightbox(img.src)}
+            {images.map((img, index) => (
+              <div key={img.id} onClick={() => setLightboxIndex(index)}
                 style={{ borderRadius: 8, overflow: "hidden", aspectRatio: "1", border: "1px solid #1E1E1E", background: "#161616", cursor: "pointer" }}>
                 <img src={img.src} alt={img.name} style={{ width: "100%", height: "100%", objectFit: "cover", display: "block" }} />
               </div>
@@ -73,15 +100,20 @@ function GalleryView() {
         )}
       </div>
 
-      {lightbox && (
-        <div onClick={() => setLightbox(null)}
-          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center", cursor: "zoom-out" }}>
-          <button onClick={() => setLightbox(null)}
-            style={{ position: "absolute", top: 20, right: 24, background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: 22, width: 40, height: 40, borderRadius: "50%", cursor: "pointer" }}>
-            ✕
-          </button>
-          <img src={lightbox} alt="preview" onClick={(e) => e.stopPropagation()}
-            style={{ maxWidth: "90vw", maxHeight: "90vh", objectFit: "contain", borderRadius: 8 }} />
+      {lightboxIndex !== null && (
+        <div onTouchStart={handleTouchStart} onTouchEnd={handleTouchEnd}
+          style={{ position: "fixed", inset: 0, background: "rgba(0,0,0,0.95)", zIndex: 150, display: "flex", alignItems: "center", justifyContent: "center" }}>
+          <button onClick={() => setLightboxIndex(null)}
+            style={{ position: "absolute", top: 20, right: 24, background: "rgba(255,255,255,0.1)", border: "none", color: "white", fontSize: 22, width: 40, height: 40, borderRadius: "50%", cursor: "pointer" }}>✕</button>
+          <button onClick={prev}
+            style={{ position: "absolute", left: 16, background: "rgba(255,255,255,0.15)", border: "none", color: "white", fontSize: 28, width: 44, height: 44, borderRadius: "50%", cursor: "pointer" }}>‹</button>
+          <img src={images[lightboxIndex].src} alt="preview"
+            style={{ maxWidth: "85vw", maxHeight: "85vh", objectFit: "contain", borderRadius: 8 }} />
+          <button onClick={next}
+            style={{ position: "absolute", right: 16, background: "rgba(255,255,255,0.15)", border: "none", color: "white", fontSize: 28, width: 44, height: 44, borderRadius: "50%", cursor: "pointer" }}>›</button>
+          <div style={{ position: "absolute", bottom: 24, left: "50%", transform: "translateX(-50%)", color: "#6B6B6B", fontSize: 13 }}>
+            {lightboxIndex + 1} / {images.length}
+          </div>
         </div>
       )}
     </div>
@@ -103,14 +135,10 @@ function LoginView({ onLogin }) {
       <div style={{ background: "#161616", border: "1px solid #262626", borderRadius: 12, padding: 40, width: 360, maxWidth: "90vw", textAlign: "center" }}>
         <div style={{ fontFamily: "sans-serif", fontWeight: 700, fontSize: 22, letterSpacing: "0.12em", textTransform: "uppercase", color: "#C9A84C", marginBottom: 4 }}>ORIION</div>
         <div style={{ fontSize: 11, letterSpacing: "0.2em", textTransform: "uppercase", color: "#6B6B6B", marginBottom: 32 }}>Admin Access</div>
-        <input
-          type="password"
-          placeholder="Enter password"
-          value={pw}
+        <input type="password" placeholder="Enter password" value={pw}
           onChange={(e) => setPw(e.target.value)}
           onKeyDown={(e) => e.key === "Enter" && attempt()}
-          style={{ width: "100%", background: "#0D0D0D", border: `1px solid ${error ? "#C0392B" : "#262626"}`, borderRadius: 6, padding: "12px 14px", color: "#F2F0EB", fontSize: 14, fontFamily: "Inter, sans-serif", outline: "none", marginBottom: 12, boxSizing: "border-box" }}
-        />
+          style={{ width: "100%", background: "#0D0D0D", border: `1px solid ${error ? "#C0392B" : "#262626"}`, borderRadius: 6, padding: "12px 14px", color: "#F2F0EB", fontSize: 14, fontFamily: "Inter, sans-serif", outline: "none", marginBottom: 12, boxSizing: "border-box" }} />
         {error && <div style={{ color: "#C0392B", fontSize: 12, marginBottom: 12 }}>Incorrect password</div>}
         <button onClick={attempt}
           style={{ width: "100%", background: "#C9A84C", color: "#0D0D0D", border: "none", borderRadius: 6, padding: "12px", fontWeight: 700, fontSize: 14, cursor: "pointer" }}>
@@ -147,7 +175,8 @@ function AdminView({ onLogout }) {
   const addFolder = async () => {
     const name = newFolderName.trim();
     if (!name) return;
-    const newF = { id: fuid(), name, images: [] };
+    const slug = slugify(name);
+    const newF = { id: fuid(), name, slug, images: [] };
     const { data } = await supabase.from("collections").insert(newF).select().single();
     if (data) {
       setFolders((prev) => [...prev, data]);
@@ -197,7 +226,9 @@ function AdminView({ onLogout }) {
     ));
   };
 
-  const shareLink = `${window.location.origin}${window.location.pathname}#/gallery/${activeFolder}`;
+  const shareLink = currentFolder
+    ? `${window.location.origin}${window.location.pathname}#/gallery/${currentFolder.slug || currentFolder.id}`
+    : "";
 
   const copyLink = () => {
     navigator.clipboard.writeText(shareLink).then(() => {
