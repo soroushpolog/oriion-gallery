@@ -230,8 +230,8 @@ function AdminView({ onLogout }) {
     ));
   };
 
-  const shareLink = currentFolder
-    ? `${window.location.origin}${window.location.pathname}#/gallery/${currentFolder.slug || currentFolder.id}`
+  const  shareLink = currentFolder
+    ? `${window.location.origin}/api/gallery?slug=${currentFolder.slug || currentFolder.id}`
     : "";
 
   const copyLink = () => {
