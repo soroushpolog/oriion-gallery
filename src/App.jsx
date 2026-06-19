@@ -207,7 +207,7 @@ function AdminView({ onLogout }) {
     showToast("Uploading...");
     try {
       const uploaded = await Promise.all(validFiles.map(uploadToCloudinary));
-      const updatedImages = [...(currentFolder.images || []), ...uploaded];
+      const updatedImages = [...uploaded, ...(currentFolder.images || [])];
       await supabase.from("collections").update({ images: updatedImages }).eq("id", activeFolder);
       setFolders((prev) => prev.map((f) =>
         f.id === activeFolder ? { ...f, images: updatedImages } : f
