@@ -1,8 +1,6 @@
 import { useState, useRef, useCallback, useEffect } from "react";
 import { createClient } from "@supabase/supabase-js";
 
-const CLOUD_NAME = import.meta.env.VITE_CLOUDINARY_CLOUD_NAME;
-const UPLOAD_PRESET = import.meta.env.VITE_CLOUDINARY_UPLOAD_PRESET;
 const ADMIN_PASSWORD = "oriion2025";
 
 const supabase = createClient(
@@ -15,14 +13,26 @@ const slugify = (text) =>
 
 const fuid = () => `f_${Date.now()}`;
 
-function uploadToCloudinary(file) {
-  const url = `https://api.cloudinary.com/v1_1/${CLOUD_NAME}/image/upload`;
-  const formData = new FormData();
-  formData.append("file", file);
-  formData.append("upload_preset", UPLOAD_PRESET);
-  return fetch(url, { method: "POST", body: formData })
-    .then((r) => r.json())
-    .then((data) => ({ id: data.public_id, name: file.name, src: data.secure_url }));
+async function uploadToCloudinary(file) {
+  // Step 1: ask our backend for a short-lived, presigned upload URL for R2.
+  // Our secret keys stay on the server; the browser never sees them.
+  const presignRes = await fetch("/api/upload-url", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ filename: file.name, contentType: file.type }),
+  });
+  if (!presignRes.ok) throw new Error("Failed to get upload URL");
+  const { uploadUrl, publicUrl, key } = await presignRes.json();
+
+  // Step 2: upload the actual file straight to R2 using that URL.
+  const putRes = await fetch(uploadUrl, {
+    method: "PUT",
+    headers: { "Content-Type": file.type },
+    body: file,
+  });
+  if (!putRes.ok) throw new Error("Failed to upload file to storage");
+
+  return { id: key, name: file.name, src: publicUrl };
 }
 
 // ── Customer Gallery View ──────────────────────────────────────────
